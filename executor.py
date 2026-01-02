@@ -52,7 +52,7 @@ def execute_manim_code(code: str, scene_name: str, quality: str = "l") -> dict:
             command,
             capture_output=True,
             text=True,
-            timeout=60,  # 60 second timeout
+            timeout=180,  # 180 second timeout
             cwd=temp_dir
         )
         
@@ -126,7 +126,7 @@ def execute_manim_code(code: str, scene_name: str, quality: str = "l") -> dict:
     except subprocess.TimeoutExpired:
         return {
             'success': False,
-            'error': 'Rendering timeout (max 60 seconds)'
+            'error': 'Rendering timeout (max 180 seconds)'
         }
     except Exception as e:
         print(f"Execution error: {str(e)}")
