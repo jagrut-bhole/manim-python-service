@@ -52,7 +52,7 @@ def execute_manim_code(code: str, scene_name: str, quality: str = "l") -> dict:
             command,
             capture_output=True,
             text=True,
-            timeout=180,  # 180 second timeout
+            timeout=540,  # 540 second timeout (9 minutes)
             cwd=temp_dir
         )
         
