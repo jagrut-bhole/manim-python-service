@@ -100,6 +100,136 @@ async def execute_code(request: RenderRequest):
         # Cleanup
         cleanup_temp_dir(temp_dir)
 
+
+# Async rendering with webhook callback
+class AsyncRenderRequest(BaseModel):
+    code: str
+    quality: str = "l"
+    animation_id: str
+    webhook_url: str
+
+import httpx
+from fastapi import BackgroundTasks
+
+async def process_render_job(
+    code: str, 
+    quality: str, 
+    animation_id: str, 
+    webhook_url: str
+):
+    """Background task to render video and call webhook when done"""
+    
+    result_data = {
+        "animation_id": animation_id,
+        "success": False,
+        "video_url": None,
+        "thumbnail_url": None,
+        "duration": None,
+        "error": None
+    }
+    
+    try:
+        # Validate code
+        is_valid, error_msg = validate_code(code)
+        if not is_valid:
+            result_data["error"] = error_msg
+            await send_webhook(webhook_url, result_data)
+            return
+        
+        scene_name = extract_scene_name(code)
+        if not scene_name:
+            result_data["error"] = "Scene class not found"
+            await send_webhook(webhook_url, result_data)
+            return
+        
+        print(f"[Async] Executing scene: {scene_name} for animation {animation_id}")
+        
+        # Execute manim
+        result = execute_manim_code(
+            code=code,
+            scene_name=scene_name,
+            quality=quality
+        )
+        
+        if not result['success']:
+            result_data["error"] = result['error']
+            await send_webhook(webhook_url, result_data)
+            return
+        
+        video_path = result['video_path']
+        thumbnail_path = result.get('thumbnail_path')
+        temp_dir = result['temp_dir']
+        
+        try:
+            # Upload to S3
+            print(f"[Async] Uploading to S3 for animation {animation_id}...")
+            upload_result = s3_uploader.upload_video_and_thumbnail(
+                video_path=video_path,
+                thumbnail_path=thumbnail_path
+            )
+            
+            result_data["success"] = True
+            result_data["video_url"] = upload_result['video_url']
+            result_data["thumbnail_url"] = upload_result.get('thumbnail_url')
+            result_data["duration"] = result.get('duration', 0)
+            
+            print(f"[Async] Upload complete for animation {animation_id}!")
+            
+        except Exception as e:
+            print(f"[Async] Upload error: {e}")
+            result_data["error"] = f"Upload failed: {str(e)}"
+            
+        finally:
+            cleanup_temp_dir(temp_dir)
+            
+    except Exception as e:
+        print(f"[Async] Render job error: {e}")
+        result_data["error"] = str(e)
+    
+    # Send webhook callback
+    await send_webhook(webhook_url, result_data)
+
+
+async def send_webhook(webhook_url: str, data: dict):
+    """Send webhook callback to Next.js app"""
+    try:
+        print(f"[Webhook] Sending callback to {webhook_url}")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                webhook_url,
+                json=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-webhook-secret": os.getenv("WEBHOOK_SECRET", "")
+                }
+            )
+            print(f"[Webhook] Response: {response.status_code}")
+    except Exception as e:
+        print(f"[Webhook] Failed to send callback: {e}")
+
+
+@app.post("/execute-async")
+async def execute_code_async(request: AsyncRenderRequest, background_tasks: BackgroundTasks):
+    """Start async video rendering - returns immediately, calls webhook when done"""
+    
+    print(f"[Async] Received render request for animation {request.animation_id}")
+    
+    # Add the render job to background tasks
+    background_tasks.add_task(
+        process_render_job,
+        request.code,
+        request.quality,
+        request.animation_id,
+        request.webhook_url
+    )
+    
+    return {
+        "success": True,
+        "message": "Render job started",
+        "animation_id": request.animation_id
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
