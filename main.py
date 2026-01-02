@@ -236,6 +236,5 @@ if __name__ == "__main__":
         app, 
         host="0.0.0.0", 
         port=8000,
-        timeout_keep_alive=900,  # 15 minutes keep-alive
-        timeout_notify=900  # 15 minutes timeout
+        timeout_keep_alive=900  # 15 minutes keep-alive
     )
