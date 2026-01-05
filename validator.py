@@ -22,6 +22,16 @@ LATEX_DEPENDENT = [
     'Tex(',
 ]
 
+# Common syntax errors
+COMMON_SYNTAX_ERRORS = [
+    (r'\.get_center[^\(]', 'Missing parentheses: Use .get_center() instead of .get_center'),
+    (r'\.get_top[^\(]', 'Missing parentheses: Use .get_top() instead of .get_top'),
+    (r'\.get_bottom[^\(]', 'Missing parentheses: Use .get_bottom() instead of .get_bottom'),
+    (r'\.get_left[^\(]', 'Missing parentheses: Use .get_left() instead of .get_left'),
+    (r'\.get_right[^\(]', 'Missing parentheses: Use .get_right() instead of .get_right'),
+    (r'\.get_corner[^\(]', 'Missing parentheses: Use .get_corner() instead of .get_corner'),
+]
+
 def validate_code(code: str) -> tuple[bool, str]:
     """
     Validate Manim code for security
@@ -70,6 +80,11 @@ def validate_code(code: str) -> tuple[bool, str]:
             print(f"Warning: Code uses {latex_feat} which requires LaTeX to be installed (MiKTeX on Windows)")
             print(f"  Consider using Text() with Unicode symbols instead for simple labels")
     
+    # Check for common syntax errors
+    for pattern, error_msg in COMMON_SYNTAX_ERRORS:
+        if re.search(pattern, code):
+            return False, f"Common Manim error detected: {error_msg}"
+    
     return True, ""
 
 def extract_scene_name(code: str) -> str:
@@ -88,3 +103,36 @@ def extract_scene_name(code: str) -> str:
         return match.group(1)
     
     return None
+
+
+if __name__ == "__main__":
+    # Test common syntax error detection
+    test_code = '''from manim import *
+
+class TestScene(Scene):
+    def construct(self):
+        circle = Circle()
+        text = Text('test')
+        text.move_to(circle.get_center)
+'''
+    
+    is_valid, error = validate_code(test_code)
+    print(f"Test 1 - Missing parentheses:")
+    print(f"  Valid: {is_valid}")
+    print(f"  Error: {error}")
+    print()
+    
+    # Test correct code
+    correct_code = '''from manim import *
+
+class TestScene(Scene):
+    def construct(self):
+        circle = Circle()
+        text = Text('test')
+        text.move_to(circle.get_center())
+'''
+    
+    is_valid2, error2 = validate_code(correct_code)
+    print(f"Test 2 - Correct code:")
+    print(f"  Valid: {is_valid2}")
+    print(f"  Error: {error2}")
